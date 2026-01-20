@@ -5,16 +5,22 @@ from pydrive.drive import GoogleDrive
 import os
 import json
 
-secrets = st.secrets  # Compatível com Streamlit Cloud
+secrets = st.secrets
 
 @st.cache_resource
 def authenticate_drive():
+    # Verificar se o segredo existe
+    if "client_secrets.json" not in secrets:
+        st.error("❌ O segredo 'client_secrets.json' NÃO está definido nos secrets da aplicação Streamlit.")
+        st.stop()
+
+    # Criar o arquivo temporário para autenticação
     with open("client_secrets.json", "w") as f:
         f.write(secrets["client_secrets.json"])
 
     gauth = GoogleAuth()
     gauth.LoadClientConfigFile("client_secrets.json")
-    gauth.CommandLineAuth()  # ESSENCIAL para funcionar no Streamlit Cloud
+    gauth.CommandLineAuth()  # Usado no Streamlit Cloud
     return GoogleDrive(gauth)
 
 drive = authenticate_drive()
@@ -46,6 +52,7 @@ def upload_csv(local_name, file_title):
         file.SetContentFile(local_name)
         file.Upload()
 
+# Arquivos de dados
 stock_filename = "base_stock_inicial.csv"
 insem_filename = "inseminacoes_iniciais.csv"
 
@@ -57,6 +64,7 @@ st.title("📊 Gestor de Sémen - Embriovet (Google Drive)")
 
 menu = st.sidebar.radio("Navegar", ["📦 Consultar Stock", "📝 Registrar Inseminação", "📈 Relatórios"])
 
+# CONSULTAR STOCK
 if menu == "📦 Consultar Stock":
     st.header("📦 Stock Disponível por Garanhão")
     garanhao = st.selectbox("Selecione o Garanhão", sorted(stock_df["Garanhão"].dropna().unique()))
@@ -69,6 +77,7 @@ if menu == "📦 Consultar Stock":
     ]
     st.dataframe(df_filtrado, use_container_width=True)
 
+# REGISTRAR INSEMINAÇÃO
 elif menu == "📝 Registrar Inseminação":
     st.header("📝 Registro de Inseminação")
 
@@ -109,7 +118,7 @@ elif menu == "📝 Registrar Inseminação":
     else:
         st.warning("Nenhum protocolo com stock disponível para este garanhão.")
 
+# RELATÓRIOS
 elif menu == "📈 Relatórios":
     st.header("📈 Relatório de Inseminações")
     st.dataframe(inseminacoes_df.sort_values(by="Data Inseminação", ascending=False), use_container_width=True)
-
