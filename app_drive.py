@@ -2,33 +2,33 @@ import streamlit as st
 import pandas as pd
 from pydrive.auth import GoogleAuth
 from pydrive.drive import GoogleDrive
-from streamlit.runtime.secrets import secrets
+import os
+import json
 
-# 🔐 Autenticação via Google Drive com o segredo seguro
+secrets = st.secrets  # Corrigido para funcionar no Streamlit Cloud
+
 @st.cache_resource
 def authenticate_drive():
-    # Cria temporariamente o client_secrets.json a partir dos Streamlit Secrets
+    # Criar arquivo temporário com conteúdo do client_secrets.json vindo dos secrets
     with open("client_secrets.json", "w") as f:
         f.write(secrets["client_secrets.json"])
 
     gauth = GoogleAuth()
     gauth.LoadClientConfigFile("client_secrets.json")
     gauth.LocalWebserverAuth()
-    return GoogleDrive(gauth)
+    drive = GoogleDrive(gauth)
+    return drive
 
-# Autentica e conecta ao Google Drive
 drive = authenticate_drive()
 
-# 📁 ID da pasta compartilhada no Google Drive
 FOLDER_ID = "1bwU96yqfhAhVW7i0GP_USVddd-KIh39d"
 
-# 🔍 Função para buscar arquivos por título na pasta
 def get_file_by_title(title):
-    query = f"title='{title}' and '{FOLDER_ID}' in parents and trashed=false"
-    file_list = drive.ListFile({'q': query}).GetList()
+    file_list = drive.ListFile({
+        'q': f"title='{title}' and '{FOLDER_ID}' in parents and trashed=false"
+    }).GetList()
     return file_list[0] if file_list else None
 
-# 📥 Baixa e carrega CSV do Drive
 def download_csv(file_title, local_name):
     file = get_file_by_title(file_title)
     if file:
@@ -38,7 +38,6 @@ def download_csv(file_title, local_name):
         st.error(f"Arquivo '{file_title}' não encontrado na pasta do Google Drive.")
         return pd.DataFrame()
 
-# 📤 Atualiza ou cria CSV no Drive
 def upload_csv(local_name, file_title):
     file = get_file_by_title(file_title)
     if file:
@@ -49,21 +48,21 @@ def upload_csv(local_name, file_title):
         file.SetContentFile(local_name)
         file.Upload()
 
-# 📂 Arquivos usados no app
+# Nomes dos arquivos no Drive
 stock_filename = "base_stock_inicial.csv"
 insem_filename = "inseminacoes_iniciais.csv"
 
-# 📊 Carregando os dados
+# Leitura dos dados
 stock_df = download_csv(stock_filename, "stock_temp.csv")
 inseminacoes_df = download_csv(insem_filename, "insem_temp.csv")
 
-# 🖥️ Interface do Streamlit
+# Configuração da Página
 st.set_page_config(page_title="Gestor de Sémen - Embriovet", layout="wide")
 st.title("📊 Gestor de Sémen - Embriovet (Google Drive)")
 
 menu = st.sidebar.radio("Navegar", ["📦 Consultar Stock", "📝 Registrar Inseminação", "📈 Relatórios"])
 
-# 📦 CONSULTAR STOCK
+# CONSULTAR STOCK
 if menu == "📦 Consultar Stock":
     st.header("📦 Stock Disponível por Garanhão")
     garanhao = st.selectbox("Selecione o Garanhão", sorted(stock_df["Garanhão"].dropna().unique()))
@@ -76,18 +75,20 @@ if menu == "📦 Consultar Stock":
     ]
     st.dataframe(df_filtrado, use_container_width=True)
 
-# 📝 REGISTRO DE INSEMINAÇÃO
+# REGISTRAR INSEMINAÇÃO
 elif menu == "📝 Registrar Inseminação":
     st.header("📝 Registro de Inseminação")
+
     garanhao = st.selectbox("Garanhão", sorted(stock_df["Garanhão"].dropna().unique()))
     protocolos = stock_df[(stock_df["Garanhão"] == garanhao) & (stock_df["Existência Atual"] > 0)]
 
     if not protocolos.empty:
         data = st.date_input("Data da Inseminação")
         egua = st.text_input("Nome da Égua")
-        st.markdown("### Selecionar protocolo e palhetas gastas")
 
+        st.markdown("### Selecionar protocolo e palhetas gastas")
         new_records = []
+
         for idx, row in protocolos.iterrows():
             col1, col2 = st.columns([4, 1])
             with col1:
@@ -115,8 +116,7 @@ elif menu == "📝 Registrar Inseminação":
     else:
         st.warning("Nenhum protocolo com stock disponível para este garanhão.")
 
-# 📈 RELATÓRIO
+# RELATÓRIOS
 elif menu == "📈 Relatórios":
     st.header("📈 Relatório de Inseminações")
     st.dataframe(inseminacoes_df.sort_values(by="Data Inseminação", ascending=False), use_container_width=True)
-
